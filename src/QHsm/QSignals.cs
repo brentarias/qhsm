@@ -42,8 +42,13 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
+// Rev History:
+// *Sep 14 2010:
+//  Added "Start" and "Stop" base signals, to be used by active state machines.
+//  Added MessageAttribute to support object-based messaging.
 
 
+using System;
 namespace qf4net
 {
     /// <summary>
@@ -73,6 +78,14 @@ namespace qf4net
         /// 
         /// </summary>
         Exit,
+        /// <summary>
+        /// Raised by active state-machine when it is told to start().
+        /// </summary>
+        Start,
+        /// <summary>
+        /// Raised by active state-machine when it is told to stop().
+        /// </summary>
+        Stop,
         /// <summary>
         /// Entry in the enumeration that marks the first slot that is available for custom signals.
         /// </summary>

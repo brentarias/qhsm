@@ -42,19 +42,34 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
-
+// Rev History:
+// *Aug 26 2010: 
+//  changed Dispatch() while loop to do-while, reflecting newer QHSM releases.
+//  changed Init() to use raw TransitionTo() functionality...simplifies comprehension.
+// *May 1 2013: 
+//  Removed "DispatchSynchronized(IQEvent)".  Only QHsmWithQueue.cs should be used for async calls.
+//  Made "public Dispatch(IQEvent)" into "protected CoreDispatch(IQEvent)".  A new "public Dispatch(IQEvent)" is virtual.
+// *May 3 2013: 
+//  Added debugger directive "DebuggerNonUserCode".  No point stepping through boiler-plate.
+//  Added 'TraceEvent' delegate, for debugging, logging, or tracing.
+// *May 9 2013: 
+//  Added "MachineState", which supports persistence through online / offline status of state-machine.
+//  Added dispatching of objects, instead of enums
 
 using System;
 using System.Diagnostics;
 using System.Collections;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace qf4net
 {
     /// <summary>
     /// The base class for all hierarchical state machines
     /// </summary>
+    [DebuggerNonUserCode]
     public abstract class QHsm : IQHsm
     {
         private static QState s_TopState;
@@ -65,8 +80,18 @@ namespace qf4net
         /// </summary>
         protected static TransitionChainStore s_TransitionChainStore = null;
 
-        private MethodInfo m_MyStateMethod;
+        protected MachineState machineState = MachineState.Online;
+        private MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
         private MethodInfo m_MySourceStateMethod;
+
+        /// <summary>
+        /// Assign for debugging or event recording
+        /// </summary>
+        public Action<MethodInfo, IQEvent> TraceEvent;
+        protected Dictionary<string, int> mapper;
+
+        public virtual event EventHandler<EventArgs> Started = (sender, args) => { };
+        public virtual event EventHandler<EventArgs> Stopped = (sender, args) => { };
 
         static QHsm()
         {
@@ -74,11 +99,44 @@ namespace qf4net
         }
 
         /// <summary>
-        /// Constructor for the Quantum Hierarchical State Machine.
+        /// Can be used for typed message to signal conversion
         /// </summary>
-        public QHsm()
+        /// <param name="userSignals">a typeof(myEnum) value</param>
+        public QHsm(Type userSignals = null)
         {
-            m_MyStateMethod = s_TopState.Method;
+            if (userSignals != null)
+            {
+                SetupMessageMap(userSignals);
+            }
+        }
+
+        protected void SetupMessageMap(Type userSigs)
+        {
+            mapper = new Dictionary<string, int>();
+
+            //BindingFlags.GetField had been one of the flags...
+            foreach (FieldInfo field in userSigs.GetFields(BindingFlags.Static | BindingFlags.Public))
+            {
+                object value = field.GetValue(null);
+                int theVal = (int)Convert.ChangeType(value, userSigs);
+
+                string name = null;
+
+                object attrib = field.GetCustomAttributes(true).First(attr => attr is MessageAttribute);
+                name = ((MessageAttribute)attrib).Type.Name;
+
+                mapper.Add(name, theVal);
+            }
+        }
+
+        protected virtual void OnStart(EventArgs arg)
+        {
+            Started(this, arg);
+        }
+
+        protected virtual void OnStop(EventArgs arg)
+        {
+            Stopped(this, arg);
         }
 
         /// <summary>
@@ -99,26 +157,34 @@ namespace qf4net
         /// <summary>
         /// Must only be called once by the client of the state machine to initialize the machine.
         /// </summary>
-        public void Init()
+        private void Init()
         {
-            Debug.Assert(m_MyStateMethod == s_TopState.Method); // HSM not executed yet
-            MethodInfo stateMethod = m_MyStateMethod; // save m_StateHandler in a temporary
+            //The Init() method originally was public, but it is more useful
+            //to have "InitializeStateMachine()" called by Start/Stop entry points.
+            Debug.Assert(m_MyStateMethod == s_TopState.GetMethodInfo()); // HSM not executed yet
+            m_MySourceStateMethod = m_MyStateMethod;
+            InitializeStateMachine();
 
-            this.InitializeStateMachine(); // We call into the deriving class
-                                           // initial transition must go *one* level deep
-            Debug.Assert(GetSuperStateMethod(m_MyStateMethod) == stateMethod);
+            //All the code below is per the original Samek design.
+            //It is being left here, as a fast reference.
 
-            stateMethod = m_MyStateMethod; // Note: We only use the temporary
-                                           // variable stateMethod so that we can use Assert statements to ensure
-                                           // that each transition is only one level deep.
-            Trigger(stateMethod, QSignals.Entry);
-            while (Trigger(stateMethod, QSignals.Init) == null) // init handled?
-            {
-                Debug.Assert(GetSuperStateMethod(m_MyStateMethod) == stateMethod);
-                stateMethod = m_MyStateMethod;
+            //MethodInfo stateMethod = m_MyStateMethod; // save m_StateHandler in a temporary
 
-                Trigger(stateMethod, QSignals.Entry);
-            }
+            //this.InitializeStateMachine(); // We call into the deriving class
+            //// initial transition must go *one* level deep
+            //Debug.Assert(GetSuperStateMethod(m_MyStateMethod) == stateMethod);
+
+            //stateMethod = m_MyStateMethod; // Note: We only use the temporary
+            //// variable stateMethod so that we can use Assert statements to ensure
+            //// that each transition is only one level deep.
+            //Trigger(stateMethod, QSignals.Entry);
+            //while (Trigger(stateMethod, QSignals.Init) == null) // init handled?
+            //{
+            //    Debug.Assert(GetSuperStateMethod(m_MyStateMethod) == stateMethod);
+            //    stateMethod = m_MyStateMethod;
+
+            //    Trigger(stateMethod, QSignals.Entry);
+            //}
         }
 
         /// <summary>
@@ -140,7 +206,7 @@ namespace qf4net
                 stateMethod != null;
                 stateMethod = GetSuperStateMethod(stateMethod))
             {
-                if (stateMethod == inquiredState.Method) // do the states match?
+                if (stateMethod == inquiredState.GetMethodInfo()) // do the states match?
                 {
                     return true;
                 }
@@ -156,37 +222,66 @@ namespace qf4net
             get { return m_MyStateMethod.Name; }
         }
 
+        public virtual void Start()
+        {
+            if (m_MyStateMethod == s_TopState.GetMethodInfo())  //CurrentStateName == "Top"
+            {
+                m_MySourceStateMethod = m_MyStateMethod;
+                InitializeStateMachine();
+            }
+            machineState = MachineState.Online;
+        }
+
+        public virtual void Stop()
+        {
+            machineState = MachineState.Exiting;
+        }
+
+        public virtual void Dispatch(IQEvent qEvent)
+        {
+            if (machineState == MachineState.Online)
+            {
+                CoreDispatch(qEvent);
+            }
+        }
+
+        public virtual void Dispatch(object message)
+        {
+            if (mapper == null)
+            {
+                throw new InvalidOperationException("QHsm must be constructed with an enum type, decorated with [Message] attributes, to use this Dispatch entry-point");
+            }
+            string name = message.GetType().Name;
+
+            int signal;
+            if (mapper.TryGetValue(name, out signal))
+            {
+                Dispatch(new QEvent(signal, message));
+            }
+        }
+
+
         /// <summary>
         /// Dispatches the specified event to this state machine
         /// </summary>
         /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
-        public void Dispatch(IQEvent qEvent)
+        protected void CoreDispatch(IQEvent qEvent)
         {
             // We let the event bubble up the chain until it is handled by a state handler
             m_MySourceStateMethod = m_MyStateMethod;
-            while (m_MySourceStateMethod != null)
+            do
             {
+                OnEvent(m_MySourceStateMethod, qEvent);
                 QState state = (QState)m_MySourceStateMethod.Invoke(this, new object[] { qEvent });
                 if (state != null)
                 {
-                    m_MySourceStateMethod = state.Method;
+                    m_MySourceStateMethod = state.GetMethodInfo();
                 }
                 else
                 {
                     m_MySourceStateMethod = null;
                 }
-            }
-        }
-
-        /// <summary>
-        /// Same as the method <see cref="Dispatch"/> but guarantees that the method can
-        /// be executed by only one thread at a time.
-        /// </summary>
-        /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
-        [MethodImpl(MethodImplOptions.Synchronized)]
-        public void DispatchSynchronized(IQEvent qEvent)
-        {
-            Dispatch(qEvent);
+            } while (m_MySourceStateMethod != null);
         }
 
         /// <summary>
@@ -211,14 +306,24 @@ namespace qf4net
 
         private MethodInfo Trigger(MethodInfo stateMethod, QSignals qSignal)
         {
-            QState state = (QState)stateMethod.Invoke(this, new object[] { new QEvent((int)qSignal) });
+            var evt = new QEvent((int)qSignal);
+            OnEvent(stateMethod, evt);
+            QState state = (QState)stateMethod.Invoke(this, new object[] { evt });
             if (state == null)
             {
                 return null;
             }
             else
             {
-                return state.Method;
+                return state.GetMethodInfo();
+            }
+        }
+
+        private void OnEvent(MethodInfo info, IQEvent signal = null)
+        {
+            if (TraceEvent != null)
+            {
+                TraceEvent(info, signal);
             }
         }
 
@@ -257,7 +362,7 @@ namespace qf4net
             QState superState = (QState)stateMethod.Invoke(this, new object[] { new QEvent((int)QSignals.Empty) });
             if (superState != null)
             {
-                return superState.Method;
+                return superState.GetMethodInfo();
             }
             else
             {
@@ -273,7 +378,7 @@ namespace qf4net
         /// </summary>
         protected void InitializeState(QState state)
         {
-            m_MyStateMethod = state.Method;
+            m_MyStateMethod = state.GetMethodInfo();
         }
 
         /// <summary>
@@ -283,9 +388,14 @@ namespace qf4net
         protected void TransitionTo(QState targetState)
         {
             Debug.Assert(targetState != s_TopState); // can't target 'top' state
+
+            OnEvent(targetState.GetMethodInfo());
+
             ExitUpToSourceState();
             // This is a dynamic transition. We pass in null instead of a recorder
-            TransitionFromSourceToTarget(targetState.Method, null);
+            TransitionFromSourceToTarget(targetState.GetMethodInfo(), null);
+
+            OnEvent(null);
         }
 
         /// <summary>
@@ -321,25 +431,29 @@ namespace qf4net
             }
         }
 
-        [MethodImpl(MethodImplOptions.Synchronized)]
         private void TransitionToSynchronized(QState targetState, ref TransitionChain transitionChain)
         {
-            if (transitionChain != null)
+            //The entire method had been embedded within [MethodImpl(MethodImplOptions.Synchronized)],
+            //which is not available in .NET Core, and so a lock is used instead...
+            lock (this)
             {
-                // We encountered a race condition. The first (non-synchronized) check indicated that the transition chain
-                // is null. However, a second threat beat us in getting into this synchronized method and populated
-                // the transition chain in the meantime. We can execute the regular method again now.
-                TransitionTo(targetState, ref transitionChain);
-            }
-            else
-            {
-                // The transition chain is not initialized yet, we need to dynamically retrieve
-                // the required transition steps and record them so that we can subsequently simply
-                // play them back.
-                TransitionChainRecorder recorder = new TransitionChainRecorder();
-                TransitionFromSourceToTarget(targetState.Method, recorder);
-                // We pass the recorded transition steps back to the caller:
-                transitionChain = recorder.GetRecordedTransitionChain();
+                if (transitionChain != null)
+                {
+                    // We encountered a race condition. The first (non-synchronized) check indicated that the transition chain
+                    // is null. However, a second threat beat us in getting into this synchronized method and populated
+                    // the transition chain in the meantime. We can execute the regular method again now.
+                    TransitionTo(targetState, ref transitionChain);
+                }
+                else
+                {
+                    // The transition chain is not initialized yet, we need to dynamically retrieve
+                    // the required transition steps and record them so that we can subsequently simply
+                    // play them back.
+                    TransitionChainRecorder recorder = new TransitionChainRecorder();
+                    TransitionFromSourceToTarget(targetState.GetMethodInfo(), recorder);
+                    // We pass the recorded transition steps back to the caller:
+                    transitionChain = recorder.GetRecordedTransitionChain();
+                }
             }
         }
 
@@ -514,7 +628,7 @@ namespace qf4net
             }
 
             // We should never get here
-            throw new ApplicationException("Mal formed Hierarchical State Machine");
+            throw new InvalidOperationException("Malformed Hierarchical State Machine");
         }
 
         private void TransitionDownToTargetState(
@@ -588,9 +702,9 @@ namespace qf4net
             Debug.Assert(transitionChain.Length > 0);
 
             TransitionStep transitionStep = transitionChain[0]; // to shut up the compiler; 
-                                                                // without it we would get the following error on the line 
-                                                                //       m_MyStateMethod = transitionStep.StateMethod;
-                                                                // at the end of this method: Use of possibly unassigned field 'State'
+            // without it we would get the following error on the line 
+            //       m_MyStateMethod = transitionStep.StateMethod;
+            // at the end of this method: Use of possibly unassigned field 'State'
             for (int i = 0; i < transitionChain.Length; i++)
             {
                 transitionStep = transitionChain[i];
@@ -738,13 +852,13 @@ namespace qf4net
             {
                 Debug.Assert(IsDerivedFromQHsm(callingClass));
 
-                Type baseType = callingClass.BaseType;
+                Type baseType = callingClass.GetTypeInfo().BaseType;
                 int slotsRequiredByBaseQHsm = 0;
 
                 while (baseType != typeof(QHsm))
                 {
                     slotsRequiredByBaseQHsm += RetrieveStoreSizeOfBaseClass(baseType);
-                    baseType = baseType.BaseType;
+                    baseType = baseType.GetTypeInfo().BaseType;
                 }
 
                 InitializeStore(slotsRequiredByBaseQHsm);
@@ -752,35 +866,36 @@ namespace qf4net
 
             private int RetrieveStoreSizeOfBaseClass(Type baseType)
             {
-                BindingFlags bindingFlags =
-                    BindingFlags.DeclaredOnly |
-                    BindingFlags.NonPublic |
-                    BindingFlags.Static |
-                    BindingFlags.GetField;
+                //BindingFlags bindingFlags =
+                //    BindingFlags.DeclaredOnly |
+                //    BindingFlags.NonPublic |
+                //    BindingFlags.Static |
+                //    BindingFlags.GetField;
+                //var oof = MemberTypes
+                //MemberInfo[] mi = baseType.FindMembers(MemberTypes.Field, bindingFlags,
+                //    Type.FilterName, "s_TransitionChainStore");
 
-                MemberInfo[] mi = baseType.FindMembers(MemberTypes.Field, bindingFlags,
-                    Type.FilterName, "s_TransitionChainStore");
+                //if (mi.Length < 1)
+                //{
+                //    return 0;
+                //}
 
-                if (mi.Length < 1)
-                {
-                    return 0;
-                }
-
-                TransitionChainStore store = (TransitionChainStore)baseType.InvokeMember(
-                    "s_TransitionChainStore", bindingFlags, null, null, null);
-                return store.Size;
+                //TransitionChainStore store = (TransitionChainStore)baseType.InvokeMember(
+                //    "s_TransitionChainStore", bindingFlags, null, null, null);
+                //return store.Size;
+                throw new NotImplementedException("This QHSM method is not yet converted to .NET Core");
             }
 
             private bool IsDerivedFromQHsm(Type type)
             {
-                Type baseType = type.BaseType;
+                Type baseType = type.GetTypeInfo().BaseType;
                 while ((baseType != null))
                 {
                     if (baseType == typeof(QHsm))
                     {
                         return true;
                     }
-                    baseType = baseType.BaseType;
+                    baseType = baseType.GetTypeInfo().BaseType;
                 }
 
                 // None of the base classes is QHsm

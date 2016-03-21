@@ -42,6 +42,8 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
+// *May 1 2013: 
+//  Removed "DispatchSynchronized(IQEvent)".  Only QHsmWithQueue.cs should be used for async calls.
 
 
 using System;
@@ -62,7 +64,10 @@ namespace qf4net
         /// <summary>
         /// Must only be called once by the client of the state machine to initialize the machine.
         /// </summary>
-        void Init();
+        //void Init();
+
+        void Start();
+        void Stop();
 
         /// <summary>
         /// Determines whether the state machine is in the state specified by <see paramref="inquiredState"/>.
@@ -88,13 +93,6 @@ namespace qf4net
         /// </summary>
         /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
         void Dispatch(IQEvent qEvent);
-
-        /// <summary>
-        /// Same as the method <see cref="Dispatch"/> but guarantees that the method can
-        /// be executed by only one thread at a time.
-        /// </summary>
-        /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
-        void DispatchSynchronized(IQEvent qEvent);
 
     }
 }

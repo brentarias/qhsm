@@ -42,8 +42,12 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
+// Rev History:
+// *Apr 11 2013: Added Message object as parameter-payload.
+
 
 using System;
+using System.Collections.Generic;
 
 namespace qf4net
 {
@@ -56,6 +60,7 @@ namespace qf4net
         /// The identifier of the <see cref="IQEvent"/> type.
         /// </summary>
         int QSignal { get; }
+        object Message { get; }
 
         /// <summary>
         /// The <see cref="IQEvent"/> instance in string form. It should be implemented to allow for simpler 

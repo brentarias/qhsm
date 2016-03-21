@@ -42,11 +42,17 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
-
+// Rev History:
+// *Aug 26 2010: changed queue to generic queue.
+// *Apr 29 2013: changed generic queue to concurrent queue, and made DispatchQ(...) thread-safe.
+// *Apr 2 2013: 
+//   converted Dispatch to virtual, to allow telemetry or instrumentation access.
+//   added debugger directive "DebuggerNonUserCode".  No point stepping through boiler-plate.
+//   enabled object-based messaging.
 
 using System;
-using System.Collections;
-using qf4net;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace qf4net
 {
@@ -57,28 +63,26 @@ namespace qf4net
     /// to a single method, DispatchQ. And this method could actually be modified to version or override the 
     /// base class Dispatch method...
     /// </summary>
+    [DebuggerNonUserCode]
     public abstract class QHsmQ : QHsm
     {
         /// <summary>
         /// FIFO event queue
         /// </summary>
-        private Queue m_EventQueue;
+        private ConcurrentQueue<IQEvent> m_EventQueue = new ConcurrentQueue<IQEvent>();
 
         /// <summary>
-        /// Constructor for the Quantum Hierarchical State Machine with Queue
+        /// Can be used for typed message to signal conversion
         /// </summary>
-        public QHsmQ()
-        {
-            m_EventQueue = new Queue();
-        }
-
+        /// <param name="userSignals">a typeof(myEnum) value</param>
+        public QHsmQ(Type userSignals = null) : base(userSignals) { }
 
         /// <summary>
         /// Designed to be used only for self-posting, but this design could easily be changed
         /// by making this method public.
         /// </summary>
         /// <param name="qEvent">New message posted to self during processing</param>
-        protected void Enqueue(QEvent qEvent)
+        protected void Enqueue(IQEvent qEvent)
         {
             m_EventQueue.Enqueue(qEvent);
         }
@@ -86,22 +90,45 @@ namespace qf4net
         /// <summary>
         /// Dequeues and dispatches the queued events to this state machine
         /// </summary>
-        protected void DispatchQ()
+        protected void Dispatch()
         {
-            if (isDispatching)
+            IQEvent msg = null;
+            do
             {
-                return;
+                //It is not the ConcurrentQueue that needs this synchronization lock.
+                //The lock is here because only one-thread-at-a-time is allowed to dispatch 
+                //to the state machine, and so a lock is necessary to dismiss all other threads.
+                lock (m_EventQueue)
+                {
+                    switch (machineState)
+                    {
+                        case MachineState.Online:
+                            if (msg != null)
+                            {
+                                isDispatching = false;
+                            }
+                            if (!isDispatching && m_EventQueue.TryDequeue(out msg))
+                            {
+                                isDispatching = true;
+                            }
+                            break;
+                        case MachineState.Exiting:
+                            machineState = MachineState.Offline;
+                            msg = null;
+                            OnStop(EventArgs.Empty);
+                            break;
+                        default:
+                            throw new NotSupportedException("QSM needs to send 'Restart' event");
+                            //break;
+                    }
+                }
+                if (msg != null)
+                {
+                    base.Dispatch(msg);
+                }
             }
-
-            isDispatching = true;
-            while (m_EventQueue.Count > 0)
-            {
-                //new events may be added (self-posted) during the dispatch handling of this first event
-                base.Dispatch((QEvent)m_EventQueue.Dequeue());
-            }
-            isDispatching = false;
-
-        }//DispatchQ
+            while (msg != null);
+        }//Dispatch
 
         private bool isDispatching = false;
 
@@ -110,19 +137,25 @@ namespace qf4net
         /// Designed to be called in place of base.Dispatch in the event self-posting is to be 
         /// supported.
         /// </summary>
-        public void DispatchQ(QEvent qEvent)
+        public override void Dispatch(IQEvent qEvent)
         {
             m_EventQueue.Enqueue(qEvent);
-            DispatchQ();
+            Dispatch();
 
-        }//DispatchQ
+        }//Dispatch
 
         /// <summary>
-        /// Empties the event queue
+        /// Prevent further dispatches to the state-machine.  If called internally, the current thread
+        /// is given opportunity to back up the call-stack to the Dispatch(IQEvent), before raising
+        /// a "Stopped" event to external subscribers.
         /// </summary>
-        protected void ClearQ()
+        /// <param name="exitNow"></param>
+        public override void Stop()
         {
-            m_EventQueue.Clear();
+            lock (m_EventQueue)
+            {
+                base.Stop();
+            }
         }
 
     }//QHsmQ

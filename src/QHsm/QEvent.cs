@@ -42,25 +42,33 @@
 //   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
 //   OF THE POSSIBILITY OF SUCH DAMAGE.
 // -----------------------------------------------------------------------------
+// Rev History:
+// *Apr 11 2013: 
+//    added MetaData object as parameter-payload.
+//    added debugger directive "DebuggerNonUserCode".  No point stepping through boiler-plate.
 
-
+using System.Collections.Generic;
 using System;
+using System.Diagnostics;
 
 namespace qf4net
 {
     /// <summary>
     ///  
     /// </summary>
+    [DebuggerNonUserCode]
     public class QEvent : IQEvent
     {
         private int m_QSignal;
+        private object m_MetaData;
 
         /// <summary>
         /// Default constructor - initializes all fields to default values
         /// </summary>
-        public QEvent(int qSignal)
+        public QEvent(int qSignal, object meta = null)
         {
             m_QSignal = qSignal;
+            m_MetaData = meta;
         }
 
         /// <summary>
@@ -69,6 +77,10 @@ namespace qf4net
         public int QSignal
         {
             get { return m_QSignal; }
+        }
+        public object Message
+        {
+            get { return m_MetaData; }
         }
 
         /// <summary>
