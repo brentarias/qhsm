@@ -17,7 +17,7 @@
   },
 
   "commands": {
-    "QHsm.Tests": "QHsm.Tests",
+    "run": "QHsm.Tests",
     "test": "xunit.runner.dnx"
   },
 
