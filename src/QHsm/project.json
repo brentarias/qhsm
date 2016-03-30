@@ -1,10 +1,12 @@
 {
-  "version": "1.0.0-*",
-  "description": "Qhsm Class Library",
-  "authors": [ "baria" ],
-  "tags": [ "" ],
-  "projectUrl": "",
-  "licenseUrl": "",
+  "title": "QHSM - Hierarchical State Machine",
+  "version": "0.7.0-*",
+  "summary": "A .NET adaptation of Miro Samek's hierarchical state machine.",
+  "description": "Base classes that allow a hierarchical finite automata state-chart to be translated easily and directly into C# code.  Due to its tiny size and extraordinary performance, it is suitable for embedded or real-time systems.",
+  "authors": [ "Brent Arias" ],
+  "tags": [ "state-machine", "QHSM", "HSM", "hierarchical", "state", "machine" ],
+  "projectUrl": "https://github.com/brentarias/qhsm",
+  "licenseUrl": "https://opensource.org/licenses/MIT",
     "frameworks": {
       "dotnet5.4": {
         "dependencies": {
