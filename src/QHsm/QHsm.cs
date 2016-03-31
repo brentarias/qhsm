@@ -63,6 +63,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace qf4net
 {
@@ -80,9 +81,10 @@ namespace qf4net
         /// </summary>
         protected static TransitionChainStore s_TransitionChainStore = null;
 
-        protected MachineState machineState = MachineState.Online;
+        protected MachineState machineState = MachineState.Offline;
         private MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
         private MethodInfo m_MySourceStateMethod;
+        private TaskCompletionSource<string> completion;
 
         /// <summary>
         /// Assign for debugging or event recording
@@ -137,6 +139,7 @@ namespace qf4net
         protected virtual void OnStop(EventArgs arg)
         {
             Stopped(this, arg);
+            completion.SetResult(m_MyStateMethod.Name);
         }
 
         /// <summary>
@@ -222,7 +225,7 @@ namespace qf4net
             get { return m_MyStateMethod.Name; }
         }
 
-        public virtual void Start()
+        public virtual Task<string> Start()
         {
             if (m_MyStateMethod == s_TopState.GetMethodInfo())  //CurrentStateName == "Top"
             {
@@ -230,6 +233,8 @@ namespace qf4net
                 InitializeStateMachine();
             }
             machineState = MachineState.Online;
+            completion = new TaskCompletionSource<string>();
+            return completion.Task;
         }
 
         public virtual void Stop()
@@ -259,7 +264,6 @@ namespace qf4net
                 Dispatch(new QEvent(signal, message));
             }
         }
-
 
         /// <summary>
         /// Dispatches the specified event to this state machine

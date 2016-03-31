@@ -47,6 +47,7 @@
 
 
 using System;
+using System.Threading.Tasks;
 
 namespace qf4net
 {
@@ -66,7 +67,7 @@ namespace qf4net
         /// </summary>
         //void Init();
 
-        void Start();
+        Task<string> Start();
         void Stop();
 
         /// <summary>

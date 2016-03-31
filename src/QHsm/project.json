@@ -1,26 +1,27 @@
 {
   "title": "QHSM - Hierarchical State Machine",
-  "version": "0.7.0-*",
+  "version": "0.7.1-*",
   "summary": "A .NET adaptation of Miro Samek's hierarchical state machine.",
   "description": "Base classes that allow a hierarchical finite automata state-chart to be translated easily and directly into C# code.  Due to its tiny size and extraordinary performance, it is suitable for embedded or real-time systems.",
   "authors": [ "Brent Arias" ],
+  "releaseNotes": "Added async-offlining support; the Start() method now returns a Task object.",
   "tags": [ "state-machine", "QHSM", "HSM", "hierarchical", "state", "machine" ],
   "projectUrl": "https://github.com/brentarias/qhsm",
-  "licenseUrl": "https://opensource.org/licenses/MIT",
-    "frameworks": {
-      "dotnet5.4": {
-        "dependencies": {
-          "Microsoft.CSharp": "4.0.1-beta-23516",
-          "System.Collections": "4.0.11-beta-23516",
-          "System.Collections.NonGeneric": "4.0.1-beta-23516",
-          "System.Linq": "4.0.1-beta-23516",
-          "System.Reflection": "4.1.0-beta-23516",
-          "System.Runtime": "4.0.21-beta-23516",
-          "System.Threading": "4.0.11-beta-23516"
-        }
+  "licenseUrl": "https://github.com/brentarias/qhsm/blob/master/LICENSE",
+  "frameworks": {
+    "dotnet5.4": {
+      "dependencies": {
+        "Microsoft.CSharp": "4.0.1-beta-23516",
+        "System.Collections": "4.0.11-beta-23516",
+        "System.Collections.NonGeneric": "4.0.1-beta-23516",
+        "System.Linq": "4.0.1-beta-23516",
+        "System.Reflection": "4.1.0-beta-23516",
+        "System.Runtime": "4.0.21-beta-23516",
+        "System.Threading": "4.0.11-beta-23516"
       }
-    },
+    }
+  },
   "dependencies": {
-    "System.Collections.Concurrent": "4.0.11-beta-23516",
+    "System.Collections.Concurrent": "4.0.11-beta-23516"
   }
 }

@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -17,7 +18,7 @@ namespace QHsm.Tests
             var person = new PersonMachine();
             person.TraceEvent = Program.Trace;
             person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
-            person.Start();
+            var completion = person.Start();
 
             var messages = new object[]
             {
@@ -29,6 +30,36 @@ namespace QHsm.Tests
             {
                 person.Dispatch(msg);
             }
+        }
+
+        [Fact]
+        public void QHsm_InitWithCompletionNotice_Ok()
+        {
+            var person = new PersonMachine();
+            person.TraceEvent = Program.Trace;
+            person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
+            var completion = person.Start();
+
+            Task.Run(() =>
+            {
+                var messages = new object[]
+                {
+                    new TiredMessage(),
+                    new TiredMessage(),
+                };
+
+                foreach (var msg in messages)
+                {
+                    person.Dispatch(msg);
+                }
+            });
+
+            //In production, a blocking statement like this would not
+            //be used.  But a unit test framework requires this kind
+            //of "wait for asynchronous test to complete" construct.
+            var isSuccess = completion.Wait(80);
+
+            Assert.True(isSuccess && completion.Status == TaskStatus.RanToCompletion);            
         }
 
     }
