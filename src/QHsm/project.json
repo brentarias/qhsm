@@ -1,14 +1,17 @@
 {
   "title": "QHSM - Hierarchical State Machine",
-  "version": "0.7.1-*",
+  "version": "0.7.2-*",
   "summary": "A .NET adaptation of Miro Samek's hierarchical state machine.",
   "description": "Base classes that allow a hierarchical finite automata state-chart to be translated easily and directly into C# code.  Due to its tiny size and extraordinary performance, it is suitable for embedded or real-time systems.",
   "authors": [ "Brent Arias" ],
-  "releaseNotes": "Added async-offlining support; the Start() method now returns a Task object.",
+  "releaseNotes": "Added 'net46' TFM (full CLR) support.",
   "tags": [ "state-machine", "QHSM", "HSM", "hierarchical", "state", "machine" ],
   "projectUrl": "https://github.com/brentarias/qhsm",
   "licenseUrl": "https://github.com/brentarias/qhsm/blob/master/LICENSE",
   "frameworks": {
+    "net46": {
+      "dependencies": { }
+    },
     "dotnet5.4": {
       "dependencies": {
         "Microsoft.CSharp": "4.0.1-beta-23516",

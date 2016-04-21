@@ -9,7 +9,7 @@ namespace QHsm.Tests
 {
     /// <summary>
     /// In the QHSM, enum values represent events.  In contrast, the .NET paradigm
-    /// is best suited by having objects represent events.  To resolve this mismatch,
+    /// is best suited with objects as events.  To resolve this mismatch,
     /// this customized .NET QHSM maps object messages to enum values by using
     /// a MessageAttribute.
     /// </summary>

@@ -1,6 +1,6 @@
 # QHSM for .NET
 
-This library provides a port of the `QHsm` and `QHsmWithQueue` 
+This library provides a .Net adaptation of the `QHsm` and `QHsmWithQueue` 
 base classes, which come from [Samek's QP Framework](http://www.state-machine.com/). 
 These are base classes that allow a simple and direct implementation of finite-automata, 
 hierarchical state-charts.  It is compatible with .NET Core (update 1 RC).
@@ -12,6 +12,122 @@ The test project is simultaneously an xUnit unit-test project, and a demo execut
 [xUnit.net framework](https://xunit.github.io/docs/getting-started-dnx.html) was chosen 
 because it is, at the time of this writing, the only unit-test framework (known) as 
 compatible with .NET Core.
+
+## Usage Examples
+
+Using the unit-test "moody person" state machine as an example, the basic components of a 
+state-machine are shown here:
+
+    /// <summary>
+    /// In the QHSM, enum values represent events.  In contrast, the .NET paradigm
+    /// is best suited with objects as events.  To resolve this mismatch,
+    /// this customized .NET QHSM maps object messages to enum values by using
+    /// a MessageAttribute.
+    /// </summary>
+    public enum PersonSignals
+    {
+        [Message(typeof(PokeMessage))]
+        Poke = QSignals.UserSig,
+        [Message(typeof(TiredMessage))]
+        Tired,
+        [Message(typeof(NoiseMessage))]
+        Noise,
+        [Message(typeof(PunchMessage))]
+        Punch
+    };
+
+    /// <summary>
+    /// In a real state-machine, these "message objects" likely
+    /// would have content (i.e. public properties).
+    /// </summary>
+    public class PokeMessage { }
+    public class TiredMessage { }
+    public class NoiseMessage { }
+    public class PunchMessage { }
+
+    public class PersonMachine : QHsmQ
+    {
+        // The state machine knows how to convert object messages into
+        // the enum "signals" expected by the QHSM, based on reflecting
+        // the enum type supplied as a paramter.
+        public PersonMachine() : base(typeof(PersonSignals)) { }
+
+        // The transition to the initial event is specified in this
+        // method override.
+        protected override void InitializeStateMachine()
+        {
+            //Perform state-machine init.
+            TransitionTo(Happy);
+        } 
+        
+        // ... state and action implementation provided by you.
+    }
+
+Activating the state machine is as follows:
+
+    var person = new PersonMachine();
+    
+    //Optionally provide a delegate for logging.
+    person.TraceEvent = Trace;
+    
+    // This will either initialize or resume operations of the state-machine.
+    // This example assumes that the state-machine will stop itself when it
+    // achieves a particular target state or condition.
+    await person.Start();
+    
+Once the state machine is "Stopped", it can be serialized for persistence and resumed later. 
+It can be stopped internaly or externally.  An example of an internally initiated "Stop" is below. 
+This time a "UserLifecycle" state-machine will be the example:
+
+    internal enum SubscriberMsg
+    {
+        [Message(typeof(SubscriberDef))]
+        Apply = QSignals.UserSig,
+        Accepted
+    }
+
+    public class UserLifecycle : QHsmQ
+    {
+        //Usual setup omitted...
+
+        //Exampe QHSM state...
+        protected QState Operational(IQEvent evt)
+        {
+            switch (evt.QSignal)
+            {
+                case (int)SubscriberMsg.Apply:
+                    var application = (SubscriberDef)evt.Message;
+                    AddSubscriberAction(application);
+                    return null;
+                case (int)SubscriberMsg.Accepted:
+                    TransitionTo(Received);
+                    Stop();
+                    return null;
+            }
+            return TopState;
+        }
+
+        protected async void AddSubscriberAction(SubscriberDef application)
+        {
+            try
+            {
+                //The CreateSubscriber.Handle is external logic.
+                await CreateSubscriber.Handle(application);
+                
+                //If the prior action was successful, perform a self-dispatch.
+                Dispatch(SubscriberMsg.Accepted);
+            }
+            catch(Exception ex)
+            {
+                //One of two things would happen here.  Either we self-dispatch
+                //a failure event, and let the state-machine deal with it, or
+                //we simply decide that we want the state-machine to stop:
+                Stop();
+            }
+        }
+
+The above code sample has two "Stop()" invocations, one for success and one for failure. The code which
+activated the state-machine determines the difference by testing the state of the state-machine upon exit.
 
 ## Quick Start
 
@@ -62,7 +178,7 @@ or demo from Visual Studio or the command prompt.
     
 ## Customization
 
-This port has customizations:
+This QHSM .Net adaptation consists primarily of the following customizations:
 
  * The initial state transition mechanism has been replaced with the `TransitionTo(...)` standard mechanism.
  
@@ -77,11 +193,11 @@ This port has customizations:
  * Logging event hooks have been added.
  * A new `Dispatch` entry point allows `object` instances to serve as signals, instead of enum values.
   
-The object-dispatch capability is the recommended way to interact with this .NET port of QHSM.
+The object-dispatch capability is the recommended way to interact with these base classes.
 
 ## Credits
 
-This port is based on a prior [QP .net port provided by Dr. Rainer Hessmer](http://www.hessmer.org/dev/qhsm/). 
+This adaptation is based on a prior [QP .net port provided by Dr. Rainer Hessmer](http://www.hessmer.org/dev/qhsm/). 
 The initial check-in for this repo contained an unmodified 
 subset of Hessmer's port, to facilitate comparisons between 
 the original and this current distro.
