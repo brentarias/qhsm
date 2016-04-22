@@ -57,11 +57,9 @@ using System.Diagnostics;
 namespace qf4net
 {
     /// <summary>
-    /// Designed to allow a state machine to post NEW messages to itself during the handling of a dispatch call. 
-    /// The assumption is that most environments (Windows, XWindows) will support event handling and that the 
-    /// only time this mechanism will be required is for self-posting. Therefore, the public interface is limited 
-    /// to a single method, DispatchQ. And this method could actually be modified to version or override the 
-    /// base class Dispatch method...
+    /// Designed for multi-threaded event dispatch, including self-posting of events.  Only one
+    /// thread can be executing the state machine.  All other threads that invoke Dispatch will
+    /// leave an event payload in the queue.
     /// </summary>
     [DebuggerNonUserCode]
     public abstract class QHsmQ : QHsm

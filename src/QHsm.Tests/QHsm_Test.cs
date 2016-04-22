@@ -30,6 +30,9 @@ namespace QHsm.Tests
             {
                 person.Dispatch(msg);
             }
+
+            //It should also be possible to provide the user signal directly...
+            person.Dispatch(PersonSignals.Punch);
         }
 
         [Fact]

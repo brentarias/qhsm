@@ -91,6 +91,7 @@ namespace qf4net
         /// </summary>
         public Action<MethodInfo, IQEvent> TraceEvent;
         protected Dictionary<string, int> mapper;
+        private Type userSignalType;
 
         public virtual event EventHandler<EventArgs> Started = (sender, args) => { };
         public virtual event EventHandler<EventArgs> Stopped = (sender, args) => { };
@@ -106,6 +107,7 @@ namespace qf4net
         /// <param name="userSignals">a typeof(myEnum) value</param>
         public QHsm(Type userSignals = null)
         {
+            userSignalType = userSignals;
             if (userSignals != null)
             {
                 SetupMessageMap(userSignals);
@@ -124,9 +126,11 @@ namespace qf4net
 
                 string name = null;
 
-                object attrib = field.GetCustomAttributes(true).First(attr => attr is MessageAttribute);
-                name = ((MessageAttribute)attrib).Type.Name;
+                object attrib = field.GetCustomAttributes(true).FirstOrDefault(attr => attr is MessageAttribute);
 
+                //Adding user custom signals to the "key" is not necessary (theVal.TosString()), but
+                //is done for completeness and debugging purposes.
+                name = attrib == null ? theVal.ToString() : ((MessageAttribute)attrib).Type.Name;
                 mapper.Add(name, theVal);
             }
         }
@@ -250,18 +254,33 @@ namespace qf4net
             }
         }
 
+        /// <summary>
+        /// Reflection-based dispatch.
+        /// </summary>
+        /// <param name="message">Either a user signal enum value, or an object whose type is mapped to a user signal with a [MessageAttribute] annotation.</param>
         public virtual void Dispatch(object message)
         {
-            if (mapper == null)
-            {
-                throw new InvalidOperationException("QHsm must be constructed with an enum type, decorated with [Message] attributes, to use this Dispatch entry-point");
-            }
-            string name = message.GetType().Name;
+            var msgType = message.GetType();
 
-            int signal;
-            if (mapper.TryGetValue(name, out signal))
+            int signal = 0;
+            //Test if this object message is simply one of the custom user signals.
+            if (msgType == userSignalType)
             {
-                Dispatch(new QEvent(signal, message));
+                //In this case, there is no payload.
+                signal = (int)message;
+                Dispatch(new QEvent(signal));
+            }
+            else
+            {
+                string name = msgType.Name;
+                if (mapper != null && mapper.TryGetValue(name, out signal))
+                {
+                    Dispatch(new QEvent(signal, message));
+                }
+            }
+            if (signal == 0)
+            {
+                throw new InvalidOperationException("QHsm must be constructed with an enum type, optionally decorated with [Message] attributes, to use this Dispatch entry-point");
             }
         }
 

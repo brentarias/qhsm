@@ -3,7 +3,7 @@
 This library provides a .Net adaptation of the `QHsm` and `QHsmWithQueue` 
 base classes, which come from [Samek's QP Framework](http://www.state-machine.com/). 
 These are base classes that allow a simple and direct implementation of finite-automata, 
-hierarchical state-charts.  It is compatible with .NET Core (update 1 RC).
+hierarchical state-charts.  It is compatible with .NET Core (RC-update2).
 
 ## Contents
 
@@ -30,7 +30,6 @@ state-machine are shown here:
         Poke = QSignals.UserSig,
         [Message(typeof(TiredMessage))]
         Tired,
-        [Message(typeof(NoiseMessage))]
         Noise,
         [Message(typeof(PunchMessage))]
         Punch
@@ -42,7 +41,6 @@ state-machine are shown here:
     /// </summary>
     public class PokeMessage { }
     public class TiredMessage { }
-    public class NoiseMessage { }
     public class PunchMessage { }
 
     public class PersonMachine : QHsmQ
@@ -74,6 +72,15 @@ Activating the state machine is as follows:
     // This example assumes that the state-machine will stop itself when it
     // achieves a particular target state or condition.
     await person.Start();
+    
+The above code assumes the state-machine will instigate the issueing and reeiving of events. If 
+the state machine requires an initial event input before reacting, then the code would be as
+follows:
+
+    var person = new PersonMachine();
+    Task completion = person.Start();
+    person.Dispatch(PersonSignals.Noise);
+    await completion;
     
 Once the state machine is "Stopped", it can be serialized for persistence and resumed later. 
 It can be stopped internaly or externally.  An example of an internally initiated "Stop" is below. 
