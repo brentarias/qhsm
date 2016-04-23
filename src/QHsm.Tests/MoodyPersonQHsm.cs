@@ -34,7 +34,18 @@ namespace QHsm.Tests
     public class NoiseMessage { }
     public class PunchMessage { }
 
-    public class PersonMachine : QHsmQ
+    public class PersonState : IQHsmState
+    {
+        public string Workflow { get; set; }
+        /// <summary>
+        /// A typical state machine has arbitrary additional state,
+        /// called "extended state."  In this case, we are tracking
+        /// the amount of noise heard by our Moody Person.
+        /// </summary>        
+        public int DB; //represents decibels of noise
+    }
+
+    public class PersonMachine : ExtendedQHsmQ<PersonState>
     {
         /// <summary>
         /// This list of "actions" is not needed
@@ -55,15 +66,6 @@ namespace QHsm.Tests
             Snore
         }
 
-        #region extended state
-        /// <summary>
-        /// A typical state machine has arbitrary additional state,
-        /// called "extended state."  In this case, we are tracking
-        /// the amount of noise heard by our Moody Person.
-        /// </summary>
-        int DB; //represents decibels of noise
-        #endregion
-
         public PersonMachine() : base(typeof(PersonSignals)) { }
 
         protected override void InitializeStateMachine()
@@ -78,7 +80,7 @@ namespace QHsm.Tests
             {
                 case (int)QSignals.Entry:
                     SomeAction(Actions.Stretch);
-                    DB = 0;
+                    CurrentState.DB = 0;
                     Console.WriteLine("   DB = 0");
                     return null;
 
@@ -189,9 +191,9 @@ namespace QHsm.Tests
                     return null;
 
                 case (int)PersonSignals.Noise:
-                    DB += 20;
+                    CurrentState.DB += 20;
                     Console.WriteLine("   DB += 20");
-                    if (DB >= 40)
+                    if (CurrentState.DB >= 40)
                     {
                         TransitionTo(Awake);
                     }

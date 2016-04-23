@@ -56,6 +56,10 @@ namespace qf4net
     /// </summary>
     public delegate QState QState(IQEvent qEvent);
 
+    public interface IQHsmState
+    {
+        string Workflow { get; set; }
+    }
 
     /// <summary>
     /// Interface implemented by a Hierarchical State Machine.
@@ -67,7 +71,9 @@ namespace qf4net
         /// </summary>
         //void Init();
 
-        Task<string> Start();
+        /// <summary>
+        /// Regardless of how state machines are started, they are all stopped the same way.
+        /// </summary>
         void Stop();
 
         /// <summary>
@@ -94,6 +100,12 @@ namespace qf4net
         /// </summary>
         /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
         void Dispatch(IQEvent qEvent);
+
+        /// <summary>
+        /// Dispatch user signals, or messages that will be auto-mapped to user signals.
+        /// </summary>
+        /// <param name="message"></param>
+        void Dispatch(object message);
 
     }
 }

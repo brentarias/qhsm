@@ -17,10 +17,11 @@ namespace QHsm.Tests
             person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
             person.Start();
 
+            PersonState state = null;
             char input = 'a';
             do
             {
-                Console.WriteLine("Input an event: (P)oke, (T)ired, (N)oise, P(u)nch or E(x)it\n");
+                Console.WriteLine("Input an event: (P)oke, (T)ired, (N)oise, P(u)nch, (R)estore or E(x)it\n");
                 var keyInfo = Console.ReadKey();
                 Console.WriteLine();
                 input = Char.ToLowerInvariant(keyInfo.KeyChar);
@@ -41,11 +42,25 @@ namespace QHsm.Tests
                         break;
                     case 'x':
                         return;
+                    case 'r':
+                        //Simulate stopping, persisting, and restoring the state-machine.
+                        person.Stop();
+                        state = person.CurrentState;
+                        person = new PersonMachine();
+                        person.TraceEvent = Trace;
+                        //Normally only the state-machine is permitted to change these values,
+                        //but for testing purposes on the "moody person" machine, this is ok.
+                        state.DB = 100;
+                        person.Start(state);
+                        break;
                     default:
                         Console.WriteLine("Command '{0}' is unrecognized input", input);
                         break;
                 }
-                person.Dispatch(evt);
+                if (evt != null)
+                {
+                    person.Dispatch(evt);
+                }
 
 
             } while (true);

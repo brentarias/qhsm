@@ -68,10 +68,70 @@ using System.Threading.Tasks;
 namespace qf4net
 {
     /// <summary>
+    /// Basic QHsm capabilities, with no durable/persistent "extended state" capabilities.
+    /// extended state.
+    /// </summary>
+    public abstract class QHsm : QHsm<string>
+    {
+        public QHsm(Type userSignals = null) : base(userSignals) { }
+
+        public override string CurrentState
+        {
+            get { return m_MyStateMethod.Name; }
+            protected set
+            {
+                if (machineState != MachineState.Offline)
+                {
+                    throw new InvalidOperationException("Cannot set QHSM state after Start().");
+                }
+                if (value != null)
+                {
+                    m_MyStateMethod = ImportState(value);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Basic QHsm capabilities, with durable/persistent "extended state" captured ina memento object.
+    /// </summary>
+    /// <typeparam name="T">The memento type through which state is persisted and restored.</typeparam>
+    public abstract class ExtendedQHsm<T> : QHsm<T> where T : class, IQHsmState, new()
+    {
+        public ExtendedQHsm(Type userSignals = null) : base(userSignals) { }
+
+        private T combinedState;
+
+        public override T CurrentState
+        {
+            get
+            {
+                combinedState.Workflow = m_MyStateMethod.Name;
+                return combinedState;
+            }
+            protected set
+            {
+                if (machineState != MachineState.Offline)
+                {
+                    throw new InvalidOperationException("Cannot set QHSM state after Start().");
+                }
+                if (value != null)
+                {
+                    m_MyStateMethod = ImportState(value.Workflow);
+                }else
+                {
+                    combinedState = new T();
+                }
+                combinedState = combinedState ?? value;
+            }
+        }
+    }
+
+    /// <summary>
     /// The base class for all hierarchical state machines
     /// </summary>
     [DebuggerNonUserCode]
-    public abstract class QHsm : IQHsm
+    public abstract class QHsm<T> : IQHsm where T : class
     {
         private static QState s_TopState;
 
@@ -82,9 +142,9 @@ namespace qf4net
         protected static TransitionChainStore s_TransitionChainStore = null;
 
         protected MachineState machineState = MachineState.Offline;
-        private MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
+        protected MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
         private MethodInfo m_MySourceStateMethod;
-        private TaskCompletionSource<string> completion;
+        private TaskCompletionSource<T> completion;
 
         /// <summary>
         /// Assign for debugging or event recording
@@ -142,8 +202,11 @@ namespace qf4net
 
         protected virtual void OnStop(EventArgs arg)
         {
-            Stopped(this, arg);
-            completion.SetResult(m_MyStateMethod.Name);
+            if (completion.Task.Status == TaskStatus.WaitingForActivation)
+            {
+                Stopped(this, arg);
+                completion.SetResult(CurrentState);
+            }
         }
 
         /// <summary>
@@ -222,6 +285,11 @@ namespace qf4net
         }
 
         /// <summary>
+        /// Access to state needed for persisting and restoring the state-machine.
+        /// </summary>
+        public abstract T CurrentState { get; protected set; }
+
+        /// <summary>
         /// Returns the name of the (deepest) state that the state machine is currently in.
         /// </summary>
         public string CurrentStateName
@@ -229,15 +297,32 @@ namespace qf4net
             get { return m_MyStateMethod.Name; }
         }
 
-        public virtual Task<string> Start()
+        protected MethodInfo ImportState(string state)
         {
+            var machineType = GetType();
+            var method = machineType.GetMethod(state, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method == null)
+            {
+                throw new InvalidOperationException(
+                    $"'{state}' is not a valid state for {machineType.Name}."
+                    );
+            }
+            return method;
+        }
+
+        public virtual Task<T> Start(T snapshot = null)
+        {
+            CurrentState = snapshot;
             if (m_MyStateMethod == s_TopState.GetMethodInfo())  //CurrentStateName == "Top"
             {
                 m_MySourceStateMethod = m_MyStateMethod;
                 InitializeStateMachine();
+            }else
+            {
+                OnEvent(m_MyStateMethod);
             }
             machineState = MachineState.Online;
-            completion = new TaskCompletionSource<string>();
+            completion = new TaskCompletionSource<T>();
             return completion.Task;
         }
 
@@ -260,6 +345,11 @@ namespace qf4net
         /// <param name="message">Either a user signal enum value, or an object whose type is mapped to a user signal with a [MessageAttribute] annotation.</param>
         public virtual void Dispatch(object message)
         {
+            if (message == null)
+            {
+                var name = GetType().Name;
+                throw new InvalidOperationException($"QHSM '{name}': dispatching null messages is illegal.");
+            }
             var msgType = message.GetType();
 
             int signal = 0;

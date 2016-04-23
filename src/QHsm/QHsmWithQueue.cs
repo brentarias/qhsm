@@ -56,13 +56,64 @@ using System.Diagnostics;
 
 namespace qf4net
 {
+
+    /// <summary>
+    /// Designed for multi-threaded event dispatch, including self-posting of events.  Only one
+    /// thread can be executing the state machine.  All other threads that invoke Dispatch will
+    /// leave an event payload in the queue.
+    /// </summary>
+    public abstract class QHsmQ : QHsmQ<string>
+    {
+        public QHsmQ(Type userSignals = null) : base(userSignals) { }
+    }
+
+
+    /// <summary>
+    /// Designed for multi-threaded event dispatch, including self-posting of events.  Only one
+    /// thread can be executing the state machine.  All other threads that invoke Dispatch will
+    /// leave an event payload in the queue.
+    /// The ExtendedQHsmQ captures "extended state" through its memento type.
+    /// </summary>
+    /// <typeparam name="T">The memento type through which state is persisted and restored.</typeparam>
+    public abstract class ExtendedQHsmQ<T> : QHsmQ<T> where T : class, IQHsmState, new()
+    {
+        public ExtendedQHsmQ(Type userSignals = null) : base(userSignals) { }
+
+        private T combinedState;
+
+        public override T CurrentState
+        {
+            get
+            {
+                combinedState.Workflow = m_MyStateMethod.Name;
+                return combinedState;
+            }
+            protected set
+            {
+                if (machineState != MachineState.Offline)
+                {
+                    throw new InvalidOperationException("Cannot set QHSM state after Start().");
+                }
+                if (value != null)
+                {
+                    m_MyStateMethod = ImportState(value.Workflow);
+                }
+                else
+                {
+                    combinedState = new T();
+                }
+                combinedState = combinedState ?? value;
+            }
+        }
+    }
+
     /// <summary>
     /// Designed for multi-threaded event dispatch, including self-posting of events.  Only one
     /// thread can be executing the state machine.  All other threads that invoke Dispatch will
     /// leave an event payload in the queue.
     /// </summary>
     [DebuggerNonUserCode]
-    public abstract class QHsmQ : QHsm
+    public abstract class QHsmQ<T> : QHsm<T> where T : class
     {
         /// <summary>
         /// FIFO event queue
@@ -116,7 +167,7 @@ namespace qf4net
                             OnStop(EventArgs.Empty);
                             break;
                         default:
-                            throw new NotSupportedException("QSM needs to send 'Restart' event");
+                            throw new InvalidCastException("QSM needs to send 'Restart' event");
                             //break;
                     }
                 }
@@ -153,6 +204,7 @@ namespace qf4net
             lock (m_EventQueue)
             {
                 base.Stop();
+                OnStop(EventArgs.Empty);
             }
         }
 

@@ -10,8 +10,7 @@ hierarchical state-charts.  It is compatible with .NET Core (RC-update2).
 The Visual Studio 2015 solution contains a single QHsm project, and a QHsm.Tests project. 
 The test project is simultaneously an xUnit unit-test project, and a demo executable.  The 
 [xUnit.net framework](https://xunit.github.io/docs/getting-started-dnx.html) was chosen 
-because it is, at the time of this writing, the only unit-test framework (known) as 
-compatible with .NET Core.
+because it is the semi-official unit-test framework for .NET Core.
 
 ## Usage Examples
 
@@ -73,7 +72,7 @@ Activating the state machine is as follows:
     // achieves a particular target state or condition.
     await person.Start();
     
-The above code assumes the state-machine will instigate the issueing and reeiving of events. If 
+The above code assumes the state-machine will instigate the issueing and receiving of events. If 
 the state machine requires an initial event input before reacting, then the code would be as
 follows:
 
@@ -135,6 +134,55 @@ This time a "UserLifecycle" state-machine will be the example:
 
 The above code sample has two "Stop()" invocations, one for success and one for failure. The code which
 activated the state-machine determines the difference by testing the state of the state-machine upon exit.
+
+Each state-machine has a property called `CurrentState` which contains everything needed to persist
+the state-machine, so that it can be restored at a later time.  The examples shown earlier assume
+that each state-machine has only one state variable - a string that names the current state.  This means
+that restoring a state-machine might look like this:
+
+    var person = new PersonMachine();
+    person.Start();
+    
+    //...some time later...
+    person.Stop();
+    string state = person.CurrentState;
+    person = new PersonMachine();
+    person.Start(state);
+   
+The above state persistence model is sufficient for many simple state machines.  However, most state-machines 
+will have "extended state" which must also be captured for proper persistence.  In this case, the state-machine 
+definitions are augmented as follows:
+
+    //Some arbitrary "memento" of state...
+    public class PersonState : IQHsmState
+    {
+        public string Workflow { get; set; }
+        /// <summary>
+        /// A typical state machine has arbitrary additional state,
+        /// called "extended state."  In this case, we are tracking
+        /// the amount of noise heard by our Moody Person.
+        /// </summary>        
+        public int DB; //represents decibels of noise
+    }
+
+    public class PersonMachine : ExtendedQHsmQ<PersonState>
+    {
+        //...the rest as before...
+    } 
+    
+Given the above definitions, the persisting and re-creation of the state machine now looks like this:
+
+    var person = new PersonMachine();
+    person.Start();
+    
+    //...some time later...
+    person.Stop();
+    PersonState state = person.CurrentState;
+    person = new PersonMachine();
+    person.Start(state);
+
+Note that the code is identical, except that the `CurrentState` property and `Start()` parameter have both
+been changed to the `PersonState` type.
 
 ## Quick Start
 
