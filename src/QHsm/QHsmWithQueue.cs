@@ -65,6 +65,22 @@ namespace qf4net
     public abstract class QHsmQ : QHsmQ<string>
     {
         public QHsmQ(Type userSignals = null) : base(userSignals) { }
+        
+        public override string CurrentState
+        {
+            get { return m_MyStateMethod.Name; }
+            protected set
+            {
+                if (machineState != MachineState.Offline)
+                {
+                    throw new InvalidOperationException("Cannot set QHSM state after Start().");
+                }
+                if (value != null)
+                {
+                    m_MyStateMethod = ImportState(value);
+                }
+            }
+        }        
     }
 
 
