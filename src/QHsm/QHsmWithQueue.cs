@@ -53,6 +53,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace qf4net
 {
@@ -94,8 +95,6 @@ namespace qf4net
     public abstract class ExtendedQHsmQ<T> : QHsmQ<T> where T : class, IQHsmState, new()
     {
         public ExtendedQHsmQ(Type userSignals = null) : base(userSignals) { }
-
-        private T combinedState;
 
         public override T CurrentState
         {
@@ -182,8 +181,8 @@ namespace qf4net
                             msg = null;
                             OnStop(EventArgs.Empty);
                             break;
-                        default:
-                            throw new InvalidCastException("QSM needs to send 'Restart' event");
+                        case MachineState.Offline:
+                            throw new InvalidOperationException("QSM needs to send 'Restart' event");
                             //break;
                     }
                 }
@@ -220,7 +219,10 @@ namespace qf4net
             lock (m_EventQueue)
             {
                 base.Stop();
-                OnStop(EventArgs.Empty);
+                if (!isDispatching)
+                {
+                    OnStop(EventArgs.Empty);
+                }
             }
         }
 

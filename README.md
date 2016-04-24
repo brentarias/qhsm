@@ -5,6 +5,11 @@ base classes, which come from [Samek's QP Framework](http://www.state-machine.co
 These are base classes that allow a simple and direct implementation of finite-automata, 
 hierarchical state-charts.  It is compatible with .NET Core (RC-update2).
 
+This adaption has two primary goals:
+
+ * Enable a persistence or "durable state-machine" capability.
+ * Integrate with asynchronous (async / await) event processing.
+
 ## Contents
 
 The Visual Studio 2015 solution contains a single QHsm project, and a QHsm.Tests project. 

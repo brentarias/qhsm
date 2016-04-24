@@ -12,7 +12,11 @@ namespace qf4net
     {
         Online,
         Exiting,
-        Offline
+        Offline,
+        /// <summary>
+        /// A Task that is faulted or cancelled has made the state-machine unstable.
+        /// </summary>
+        Halted
     }
 
 }

@@ -15,6 +15,7 @@ namespace QHsm.Tests
             var person = new PersonMachine();
             person.TraceEvent = Trace;
             person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
+            person.Failed += (obj, arg) => { Console.WriteLine("STATEMACHINE EXCEPTION"); };
             person.Start();
 
             PersonState state = null;

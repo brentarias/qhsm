@@ -112,7 +112,7 @@ namespace QHsm.Tests
                     return null;
 
                 case (int)PersonSignals.Noise:
-                    Stop();
+                    TransitionTo(Elated);
                     return null;
 
                 case (int)PersonSignals.Punch:

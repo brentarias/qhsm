@@ -100,8 +100,6 @@ namespace qf4net
     {
         public ExtendedQHsm(Type userSignals = null) : base(userSignals) { }
 
-        private T combinedState;
-
         public override T CurrentState
         {
             get
@@ -135,6 +133,8 @@ namespace qf4net
     {
         private static QState s_TopState;
 
+        protected T combinedState;
+
         /// <summary>
         /// Added for symmetry reasons, so that all deriving classes can add their own static 
         /// <see cref="TransitionChainStore"/> variable using the new key word.
@@ -147,6 +147,29 @@ namespace qf4net
         private TaskCompletionSource<T> completion;
 
         /// <summary>
+        /// Each Task assigned can potentially trigger a full halt of the state-machine.
+        /// Used only for unanticipated exceptions or cancellations.  
+        /// </summary>
+        protected Task FailureTrap
+        {
+            set
+            {
+                value.ContinueWith(t => {
+                        machineState = MachineState.Halted;
+                        if (t.Status == TaskStatus.Faulted)
+                        {
+                            completion.TrySetException(t.Exception.GetBaseException());
+                        }else
+                        {
+                            completion.TrySetCanceled();
+                        }
+                        Failed?.Invoke(this, EventArgs.Empty);
+                    }, 
+                    TaskContinuationOptions.NotOnRanToCompletion);
+            }
+        }
+
+        /// <summary>
         /// Assign for debugging or event recording
         /// </summary>
         public Action<MethodInfo, IQEvent> TraceEvent;
@@ -155,6 +178,11 @@ namespace qf4net
 
         public virtual event EventHandler<EventArgs> Started = (sender, args) => { };
         public virtual event EventHandler<EventArgs> Stopped = (sender, args) => { };
+        /// <summary>
+        /// Activated when a Task from an async action, assigned to the FailureTrap property, has 
+        /// caused the state machine to terminate.
+        /// </summary>
+        public virtual event EventHandler<EventArgs> Failed = (sender, args) => { };
 
         static QHsm()
         {
@@ -202,11 +230,8 @@ namespace qf4net
 
         protected virtual void OnStop(EventArgs arg)
         {
-            if (completion.Task.Status == TaskStatus.WaitingForActivation)
-            {
                 Stopped(this, arg);
-                completion.SetResult(CurrentState);
-            }
+                completion.TrySetResult(CurrentState);
         }
 
         /// <summary>
@@ -312,7 +337,15 @@ namespace qf4net
 
         public virtual Task<T> Start(T snapshot = null)
         {
-            CurrentState = snapshot;
+            if (machineState == MachineState.Halted)
+            {
+                //Technically, a new "snapshot" could be supplied, making a restart
+                //completely ok.  However, re-inserting the original snapshot upon
+                //which the exception occurred is a mistake that should never happen.
+                //Throwing this exception helps insure that doesn't happen.
+                throw new InvalidOperationException("Cannot restart after fault.");
+            }
+            CurrentState = snapshot ?? combinedState;
             if (m_MyStateMethod == s_TopState.GetMethodInfo())  //CurrentStateName == "Top"
             {
                 m_MySourceStateMethod = m_MyStateMethod;
@@ -753,10 +786,18 @@ namespace qf4net
             // we enter the states in the passed in array in reverse order
             for (int stateIndex = indexFirstStateToEnter; stateIndex >= 0; stateIndex--)
             {
+                if (stateIndex == 0)
+                {
+                    //Acknowledging the target state, just a moment earlier than Samek's
+                    //origina design, allows persistence models to function on the entry
+                    //event of a new state.
+                    m_MyStateMethod = targetStateMethod;
+                }
                 Trigger((MethodInfo)statesTargetToLCA[stateIndex], QSignals.Entry, recorder);
             }
 
-            m_MyStateMethod = targetStateMethod;
+            //Samek originally re-assigned the current state here:
+            //m_MyStateMethod = targetStateMethod;
 
             // At last we are ready to initialize the target state.
             // If the specified target state handles init then the effective
