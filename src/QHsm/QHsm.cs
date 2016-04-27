@@ -115,7 +115,12 @@ namespace qf4net
                 }
                 if (value != null)
                 {
-                    m_MyStateMethod = ImportState(value.Workflow);
+                    //Allowing the workflow to be empty means that a 
+                    //polymorphic initialization is possible.
+                    if (!String.IsNullOrWhiteSpace(value.Workflow))
+                    {
+                        m_MyStateMethod = ImportState(value.Workflow);
+                    }
                 }else
                 {
                     combinedState = new T();
