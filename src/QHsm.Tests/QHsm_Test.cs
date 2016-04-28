@@ -23,7 +23,9 @@ namespace QHsm.Tests
             var messages = new object[]
             {
                 new PokeMessage(),
-                new TiredMessage(),
+                //Until the new interface is incorporated, multiple
+                //events is not the goal.
+                //new TiredMessage(),
             };
 
             foreach (var msg in messages)
@@ -32,7 +34,7 @@ namespace QHsm.Tests
             }
 
             //It should also be possible to provide the user signal directly...
-            person.Dispatch(PersonSignals.Punch);
+            //person.Dispatch(PersonSignals.Punch);
         }
 
         [Fact]
@@ -48,7 +50,9 @@ namespace QHsm.Tests
                 var messages = new object[]
                 {
                     new TiredMessage(),
-                    new TiredMessage(),
+                    //Until the new interface is incorporated, multiple
+                    //events is not the goal.
+                    //new TiredMessage(),
                 };
 
                 foreach (var msg in messages)

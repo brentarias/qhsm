@@ -53,6 +53,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace qf4net
@@ -191,6 +192,11 @@ namespace qf4net
                             //break;
                     }
                 }
+                if (!isDispatching  && Interlocked.Add(ref AsyncRefCount,0) == 0)
+                {
+                    machineState = MachineState.Offline;
+                    OnStop(EventArgs.Empty);
+                }
                 if (msg != null)
                 {
                     base.Dispatch(msg);
@@ -212,6 +218,18 @@ namespace qf4net
             Dispatch();
 
         }//Dispatch
+
+        protected override void StopWhenAllQuiet()
+        {
+            lock (m_EventQueue)
+            {
+                if (!isDispatching)
+                {
+                    machineState = MachineState.Offline;
+                    OnStop(EventArgs.Empty);
+                }
+            }
+        }
 
         /// <summary>
         /// Prevent further dispatches to the state-machine.  If called internally, the current thread

@@ -64,6 +64,7 @@ using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace qf4net
 {
@@ -150,27 +151,57 @@ namespace qf4net
         protected MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
         private MethodInfo m_MySourceStateMethod;
         private TaskCompletionSource<T> completion;
+        protected int AsyncRefCount;
 
         /// <summary>
-        /// Each Task assigned can potentially trigger a full halt of the state-machine.
-        /// Used only for unanticipated exceptions or cancellations.  
+        /// All asynchronous invocations must be registered here, so that the state-machine
+        /// can automatically call Stop() when quiescence is achieved.  An auto-stop occurs either 
+        /// when (1) any async routine has an unhandled exception, or when (2) all async routines are finished
+        /// *and* there is no other event/message dispatching or waiting to be dispatched.
         /// </summary>
-        protected Task FailureTrap
+        protected Task Shunt
         {
             set
             {
-                value.ContinueWith(t => {
-                        machineState = MachineState.Halted;
-                        if (t.Status == TaskStatus.Faulted)
-                        {
-                            completion.TrySetException(t.Exception.GetBaseException());
-                        }else
-                        {
-                            completion.TrySetCanceled();
-                        }
-                        Failed?.Invoke(this, EventArgs.Empty);
-                    }, 
-                    TaskContinuationOptions.NotOnRanToCompletion);
+                Interlocked.Increment(ref AsyncRefCount);
+                value.ContinueWith(TryStop);
+            }
+        }
+
+        protected void TryStop(Task t)
+        {
+            if (t.Status != TaskStatus.RanToCompletion)
+            {
+                //Because the failure path does not decrement the asyncRefCount,
+                //it implicitly gives priority to exceptions...which is just
+                //what we want.
+                machineState = MachineState.Halted;
+                if (t.Status == TaskStatus.Faulted)
+                {
+                    completion.TrySetException(t.Exception.GetBaseException());
+                }
+                else
+                {
+                    completion.TrySetCanceled();
+                }
+                Failed?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                int count = Interlocked.Decrement(ref AsyncRefCount);
+                if (count == 0)
+                {
+                    StopWhenAllQuiet();
+                }
+            }
+        }
+
+        protected virtual void StopWhenAllQuiet()
+        {
+            if (machineState == MachineState.Online)
+            {
+                machineState = MachineState.Offline;
+                OnStop(EventArgs.Empty);
             }
         }
 
