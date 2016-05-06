@@ -3,7 +3,7 @@
 This library provides a .Net adaptation of the `QHsm` and `QHsmWithQueue` 
 base classes, which come from [Samek's QP Framework](http://www.state-machine.com/). 
 These are base classes that allow a simple and direct implementation of finite-automata, 
-hierarchical state-charts.  It is compatible with .NET Core (RC-update2).
+hierarchical state-charts.  It is compatible with .NET Core (RC1-update2).
 
 This adaption has two primary goals:
 
@@ -13,14 +13,14 @@ This adaption has two primary goals:
 ## Contents
 
 The Visual Studio 2015 solution contains a single QHsm project, and a QHsm.Tests project. 
-The test project is simultaneously an xUnit unit-test project, and a demo executable.  The 
+The test project is simultaneously an xUnit unit-test project and a demo executable.  The 
 [xUnit.net framework](https://xunit.github.io/docs/getting-started-dnx.html) was chosen 
 because it is the semi-official unit-test framework for .NET Core.
 
 ## Usage Examples
 
-Using the unit-test "moody person" state machine as an example, the basic components of a 
-state-machine are shown here:
+The xUnit project contains a state-machine sample of a "moody person".  Using that code for examples, 
+the basic components of a state-machine are shown here:
 
     /// <summary>
     /// In the QHSM, enum values represent events.  In contrast, the .NET paradigm
@@ -73,90 +73,39 @@ Activating the state machine is as follows:
     person.TraceEvent = Trace;
     
     // This will either initialize or resume operations of the state-machine.
-    // This example assumes that the state-machine will stop itself when it
-    // achieves a particular target state or condition.
-    await person.Start();
+    person.Start();
     
-The above code assumes the state-machine will instigate the issueing and receiving of events. If 
-the state machine requires an initial event input before reacting, then the code would be as
+If the state machine requires an initial event input before reacting, then the code would be as
 follows:
 
     var person = new PersonMachine();
-    Task completion = person.Start();
-    person.Dispatch(PersonSignals.Noise);
-    await completion;
+    person.Start();
+    await person.Dispatch(PersonSignals.Noise);
     
-Once the state machine is "Stopped", it can be serialized for persistence and resumed later. 
-It can be stopped internaly or externally.  An example of an internally initiated "Stop" is below. 
-This time a "UserLifecycle" state-machine will be the example:
+    //A user-defined persistence routine which saves the state of the state-machine.
+    SaveTheStateSomewhere(person.CurrenState);
+    
+The `await` allows the calling code to know when the state machine is no longer processing events, 
+which means it can then be serialized for persistence and resumed later. To restore the state-machine, 
+the code would be:
 
-    internal enum SubscriberMsg
+    //User defined routine to fetch the state.
+    var state = GetTheStateFromSomwhere(id);
+    person.Start(state);
+       
+The variable `state` is either a string, or a user defined type.  To declare a user defined type, then
+the state machine is declared with that type:
+
+    public class MyStateMachine : QHsm<MyUserType> {...}
+
+The user defined type must implement the `IQHsmState` interface, which is defined as follows:
+
+    public interface IQHsmState
     {
-        [Message(typeof(SubscriberDef))]
-        Apply = QSignals.UserSig,
-        Accepted
+        string Workflow { get; set; }
     }
 
-    public class UserLifecycle : QHsmQ
-    {
-        //Usual setup omitted...
-
-        //Exampe QHSM state...
-        protected QState Operational(IQEvent evt)
-        {
-            switch (evt.QSignal)
-            {
-                case (int)SubscriberMsg.Apply:
-                    var application = (SubscriberDef)evt.Message;
-                    AddSubscriberAction(application);
-                    return null;
-                case (int)SubscriberMsg.Accepted:
-                    TransitionTo(Received);
-                    Stop();
-                    return null;
-            }
-            return TopState;
-        }
-
-        protected async void AddSubscriberAction(SubscriberDef application)
-        {
-            try
-            {
-                //The CreateSubscriber.Handle is external logic.
-                await CreateSubscriber.Handle(application);
-                
-                //If the prior action was successful, perform a self-dispatch.
-                Dispatch(SubscriberMsg.Accepted);
-            }
-            catch(Exception ex)
-            {
-                //One of two things would happen here.  Either we self-dispatch
-                //a failure event, and let the state-machine deal with it, or
-                //we simply decide that we want the state-machine to stop:
-                Stop();
-            }
-        }
-
-The above code sample has two "Stop()" invocations, one for success and one for failure. The code which
-activated the state-machine determines the difference by testing the state of the state-machine upon exit.
-
-Each state-machine has a property called `CurrentState` which contains everything needed to persist
-the state-machine, so that it can be restored at a later time.  The examples shown earlier assume
-that each state-machine has only one state variable - a string that names the current state.  This means
-that restoring a state-machine might look like this:
-
-    var person = new PersonMachine();
-    person.Start();
-    
-    //...some time later...
-    person.Stop();
-    string state = person.CurrentState;
-    person = new PersonMachine();
-    person.Start(state);
-   
-The above state persistence model is sufficient for many simple state machines.  However, most state-machines 
-will have "extended state" which must also be captured for proper persistence.  In this case, the state-machine 
-definitions are augmented as follows:
+An example might look like this:
 
     //Some arbitrary "memento" of state...
     public class PersonState : IQHsmState
@@ -175,19 +124,8 @@ definitions are augmented as follows:
         //...the rest as before...
     } 
     
-Given the above definitions, the persisting and re-creation of the state machine now looks like this:
-
-    var person = new PersonMachine();
-    person.Start();
-    
-    //...some time later...
-    person.Stop();
-    PersonState state = person.CurrentState;
-    person = new PersonMachine();
-    person.Start(state);
-
-Note that the code is identical, except that the `CurrentState` property and `Start()` parameter have both
-been changed to the `PersonState` type.
+When the state-machine is declared with a user defined state type, the `CurrentState` property
+will return that user defined state.
 
 ## Quick Start
 
@@ -247,7 +185,7 @@ This QHSM .Net adaptation consists primarily of the following customizations:
  * The QHsmWithQueue `Dispatch` routine has been modified to allow non-blocking, multi-threaded dispatch.
  * The state-machines are now persistable.
  
- This mechanism allows for durable state-machines.  This new capability required state machine initializtion
+ This mechanism allows for durable state-machines.  This new capability required state machine initialization
  to be replaced with `Start` and `Stop` entry points.
  
  * Logging event hooks have been added.
