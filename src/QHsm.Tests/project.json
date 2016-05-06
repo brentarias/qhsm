@@ -11,7 +11,7 @@
   },
 
   "dependencies": {
-    "QHsm": "0.82.1-*",
+    "QHsm": "0.9.0-*",
     "System.Threading.Tasks": "4.0.10",
     "System.Threading.Tasks.Parallel": "4.0.0",
     "xunit": "2.2.0-beta1-build3239",

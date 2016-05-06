@@ -99,13 +99,13 @@ namespace qf4net
         /// Dispatches the specified event to this state machine
         /// </summary>
         /// <param name="qEvent">The <see cref="IQEvent"/> to dispatch.</param>
-        void Dispatch(IQEvent qEvent);
+        Task Dispatch(IQEvent qEvent);
 
         /// <summary>
         /// Dispatch user signals, or messages that will be auto-mapped to user signals.
         /// </summary>
         /// <param name="message"></param>
-        void Dispatch(object message);
+        Task Dispatch(object message);
 
     }
 }

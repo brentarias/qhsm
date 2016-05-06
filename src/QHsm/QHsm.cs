@@ -150,12 +150,12 @@ namespace qf4net
         protected MachineState machineState = MachineState.Offline;
         protected MethodInfo m_MyStateMethod = s_TopState.GetMethodInfo();
         private MethodInfo m_MySourceStateMethod;
-        private TaskCompletionSource<T> completion;
+        protected TaskCompletionSource<T> completion;
         protected int AsyncRefCount;
 
         /// <summary>
-        /// All asynchronous invocations must be registered here, so that the state-machine
-        /// can automatically call Stop() when quiescence is achieved.  An auto-stop occurs either 
+        /// All asynchronous "action" invocations must be registered here, so that the state-machine
+        /// can automatically call OnStop() when quiescence is achieved.  An auto-stop occurs either 
         /// when (1) any async routine has an unhandled exception, or when (2) all async routines are finished
         /// *and* there is no other event/message dispatching or waiting to be dispatched.
         /// </summary>
@@ -191,18 +191,14 @@ namespace qf4net
                 int count = Interlocked.Decrement(ref AsyncRefCount);
                 if (count == 0)
                 {
-                    StopWhenAllQuiet();
+                    QuiesceNotify();
                 }
             }
         }
 
-        protected virtual void StopWhenAllQuiet()
+        protected virtual void QuiesceNotify()
         {
-            if (machineState == MachineState.Online)
-            {
-                machineState = MachineState.Offline;
-                OnStop(EventArgs.Empty);
-            }
+            OnStop(EventArgs.Empty);
         }
 
         /// <summary>
@@ -213,7 +209,11 @@ namespace qf4net
         private Type userSignalType;
 
         public virtual event EventHandler<EventArgs> Started = (sender, args) => { };
-        public virtual event EventHandler<EventArgs> Stopped = (sender, args) => { };
+        /// <summary>
+        /// Raised whenever the state machine has no pending work, whether in-queue or
+        /// outstanding in the form of async-callbacks.
+        /// </summary>
+        public virtual event EventHandler<EventArgs> Quiescent = (sender, args) => { };
         /// <summary>
         /// Activated when a Task from an async action, assigned to the FailureTrap property, has 
         /// caused the state machine to terminate.
@@ -266,8 +266,12 @@ namespace qf4net
 
         protected virtual void OnStop(EventArgs arg)
         {
-                Stopped(this, arg);
+            Quiescent(this, arg);
+            if (completion != null)
+            {
                 completion.TrySetResult(CurrentState);
+                completion = null;
+            }
         }
 
         /// <summary>
@@ -371,15 +375,18 @@ namespace qf4net
             return method;
         }
 
-        public virtual Task<T> Start(T snapshot = null)
+        private static Dictionary<MachineState, string> errMap = new Dictionary<MachineState, string>
         {
-            if (machineState == MachineState.Halted)
+            [MachineState.Online] = "Cannot start an already started state-machine.",
+            [MachineState.Halted] = "Cannot restart after fault.",
+            [MachineState.Exiting] = "Cannot restart the state-machine until it is completely stopped."
+        };
+
+        public virtual void Start(T snapshot = null)
+        {
+            if (machineState != MachineState.Offline)
             {
-                //Technically, a new "snapshot" could be supplied, making a restart
-                //completely ok.  However, re-inserting the original snapshot upon
-                //which the exception occurred is a mistake that should never happen.
-                //Throwing this exception helps insure that doesn't happen.
-                throw new InvalidOperationException("Cannot restart after fault.");
+                throw new InvalidOperationException(errMap[machineState]);
             }
             CurrentState = snapshot ?? combinedState;
             if (m_MyStateMethod == s_TopState.GetMethodInfo())  //CurrentStateName == "Top"
@@ -391,29 +398,56 @@ namespace qf4net
                 OnEvent(m_MyStateMethod);
             }
             machineState = MachineState.Online;
-            completion = new TaskCompletionSource<T>();
-            return completion.Task;
         }
 
         public virtual void Stop()
         {
-            machineState = MachineState.Exiting;
+            machineState = MachineState.Offline;
+            //Potentially, something more draconian could be done here,
+            //such as...
+            //completion.TrySetCanceled();
+            OnStop(EventArgs.Empty);
         }
 
-        public virtual void Dispatch(IQEvent qEvent)
+        /// <summary>
+        /// Send a signal, with optional payload, into the state-machine.
+        /// </summary>
+        /// <remarks>
+        /// This entry point is not thread safe.  Use the QhsmQ for multi-threaded dispatching.
+        /// </remarks>
+        /// <param name="qEvent">The user-defeined signal to dispatch.</param>
+        /// <returns>A signal to indicate when the state-machine has finished processing events.</returns>
+        public virtual Task Dispatch(IQEvent qEvent)
         {
-            if (machineState == MachineState.Online)
+            Task<T> token = null;
+
+            if (completion != null)
             {
-                CoreDispatch(qEvent);
+                token = Task.FromException<T>(new InvalidOperationException($"The QHsm base class is not re-entrant.  Use insteaad QHsmWithQueue for multi-threaded work."));
             }
+            else if (machineState != MachineState.Online)
+            {
+                token = Task.FromException<T>(new InvalidOperationException($"Cannot dispatch when machine-state is {machineState.ToString()}"));
+            }
+            else 
+            {
+                completion = new TaskCompletionSource<T>();
+                CoreDispatch(qEvent);
+                token = completion.Task;
+                if (Interlocked.Add(ref AsyncRefCount, 0) == 0){
+                    OnStop(EventArgs.Empty);
+                }
+            }
+            return token;
         }
 
         /// <summary>
         /// Reflection-based dispatch.
         /// </summary>
         /// <param name="message">Either a user signal enum value, or an object whose type is mapped to a user signal with a [MessageAttribute] annotation.</param>
-        public virtual void Dispatch(object message)
+        public Task Dispatch(object message)
         {
+            Task retVal = null;
             if (message == null)
             {
                 var name = GetType().Name;
@@ -427,20 +461,20 @@ namespace qf4net
             {
                 //In this case, there is no payload.
                 signal = (int)message;
-                Dispatch(new QEvent(signal));
+                retVal = Dispatch(new QEvent(signal));
             }
             else
             {
                 string name = msgType.Name;
                 if (mapper != null && mapper.TryGetValue(name, out signal))
                 {
-                    Dispatch(new QEvent(signal, message));
+                    retVal = Dispatch(new QEvent(signal, message));
                 }
             }
-            if (signal == 0)
-            {
-                throw new InvalidOperationException("QHsm must be constructed with an enum type, optionally decorated with [Message] attributes, to use this Dispatch entry-point");
-            }
+
+            retVal = retVal ?? Task.FromException<T>(new InvalidOperationException("A user signal object-to-enum mapping could not be found."));
+
+            return retVal;
         }
 
         /// <summary>

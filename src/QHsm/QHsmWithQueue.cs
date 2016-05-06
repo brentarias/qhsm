@@ -160,8 +160,9 @@ namespace qf4net
         /// <summary>
         /// Dequeues and dispatches the queued events to this state machine
         /// </summary>
-        protected void Dispatch()
+        protected Task Dispatch()
         {
+            Task<T> token = null;
             IQEvent msg = null;
             do
             {
@@ -179,31 +180,38 @@ namespace qf4net
                             }
                             if (!isDispatching && m_EventQueue.TryDequeue(out msg))
                             {
+                                completion = completion ?? new TaskCompletionSource<T>();
                                 isDispatching = true;
                             }
                             break;
                         case MachineState.Exiting:
                             machineState = MachineState.Offline;
                             msg = null;
+                            token = completion.Task;
                             OnStop(EventArgs.Empty);
                             break;
                         case MachineState.Offline:
                             throw new InvalidOperationException("QSM needs to send 'Restart' event");
                             //break;
                     }
+
+                    token = token ?? completion.Task;
+
+                    if (!isDispatching && Interlocked.Add(ref AsyncRefCount, 0) == 0)
+                    {
+                        OnStop(EventArgs.Empty);
+                    }
                 }
-                if (!isDispatching  && Interlocked.Add(ref AsyncRefCount,0) == 0)
-                {
-                    machineState = MachineState.Offline;
-                    OnStop(EventArgs.Empty);
-                }
+
                 if (msg != null)
                 {
-                    base.Dispatch(msg);
+                    CoreDispatch(msg);
                 }
             }
             while (msg != null);
-        }//Dispatch
+
+            return token;
+        }
 
         private bool isDispatching = false;
 
@@ -212,18 +220,57 @@ namespace qf4net
         /// Designed to be called in place of base.Dispatch in the event self-posting is to be 
         /// supported.
         /// </summary>
-        public override void Dispatch(IQEvent qEvent)
+
+        /// <summary>
+        /// Send a signal, with optional payload, into the state-machine.
+        /// </summary>
+        /// <remarks>
+        /// This entry-point is thread-safe.  Events arriving from multiple threads are internally
+        /// queued and then dispatched one-at-time, i.e. sequentially.
+        /// </remarks>
+        /// <param name="qEvent">The user-defeined signal to dispatch.</param>
+        /// <returns>A signal to indicate when the state-machine has finished processing events.</returns>
+        public override Task Dispatch(IQEvent qEvent)
         {
-            m_EventQueue.Enqueue(qEvent);
-            Dispatch();
+            Task token = null;
 
-        }//Dispatch
+            if (machineState != MachineState.Online)
+            {
+                token = Task.FromException<T>(new InvalidOperationException($"Cannot dispatch when machine-state is {machineState.ToString()}"));
+            } else {
+                m_EventQueue.Enqueue(qEvent);
+                token = Dispatch();
+            }
 
-        protected override void StopWhenAllQuiet()
+            return token;
+        }
+
+
+        protected override void QuiesceNotify()
         {
             lock (m_EventQueue)
             {
                 if (!isDispatching)
+                {
+                    OnStop(EventArgs.Empty);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Prevent further dispatches to the state-machine.  If called internally, the dispatch thread
+        /// is given opportunity to finish the currentDispatch(IQEvent) before raising
+        /// a "Stopped" event to external subscribers.
+        /// </summary>
+        public override void Stop()
+        {
+            lock (m_EventQueue)
+            {
+                if (isDispatching)
+                {
+                    machineState = MachineState.Exiting;
+                }
+                else
                 {
                     machineState = MachineState.Offline;
                     OnStop(EventArgs.Empty);
@@ -231,27 +278,6 @@ namespace qf4net
             }
         }
 
-        /// <summary>
-        /// Prevent further dispatches to the state-machine.  If called internally, the current thread
-        /// is given opportunity to back up the call-stack to the Dispatch(IQEvent), before raising
-        /// a "Stopped" event to external subscribers.
-        /// </summary>
-        /// <param name="exitNow"></param>
-        public override void Stop()
-        {
-            lock (m_EventQueue)
-            {
-                if (machineState == MachineState.Online)
-                {
-                    base.Stop();
-                    if (!isDispatching)
-                    {
-                        OnStop(EventArgs.Empty);
-                    }
-                }
-            }
-        }
+    }
 
-    }//QHsmQ
-
-}//namespace ReminderHsm
+}

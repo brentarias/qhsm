@@ -17,15 +17,13 @@ namespace QHsm.Tests
         {
             var person = new PersonMachine();
             person.TraceEvent = Program.Trace;
-            person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
-            var completion = person.Start();
+            person.Quiescent += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
+            person.Start();
 
             var messages = new object[]
             {
                 new PokeMessage(),
-                //Until the new interface is incorporated, multiple
-                //events is not the goal.
-                //new TiredMessage(),
+                new TiredMessage(),
             };
 
             foreach (var msg in messages)
@@ -34,37 +32,30 @@ namespace QHsm.Tests
             }
 
             //It should also be possible to provide the user signal directly...
-            //person.Dispatch(PersonSignals.Punch);
+            person.Dispatch(PersonSignals.Punch);
         }
 
         [Fact]
-        public void QHsm_InitWithCompletionNotice_Ok()
+        public async Task QHsm_InitWithCompletionNotice_Ok()
         {
             var person = new PersonMachine();
             person.TraceEvent = Program.Trace;
-            person.Stopped += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
-            var completion = person.Start();
+            person.Quiescent += (obj, arg) => { Console.WriteLine("STATEMACHINE IS OFFLINE"); };
+            person.Start();
+            Task completion = null;
 
-            Task.Run(() =>
+            var messages = new object[]
             {
-                var messages = new object[]
-                {
-                    new TiredMessage(),
-                    //Until the new interface is incorporated, multiple
-                    //events is not the goal.
-                    //new TiredMessage(),
-                };
+                new TiredMessage(),
+                new TiredMessage(),
+            };
 
-                foreach (var msg in messages)
-                {
-                    person.Dispatch(msg);
-                }
-            });
+            foreach (var msg in messages)
+            {
+                completion = person.Dispatch(msg);
+            }
 
-            //In production, a blocking statement like this would not
-            //be used.  But a unit test framework requires this kind
-            //of "wait for asynchronous test to complete" construct.
-            var isSuccess = completion.Wait(80);
+            bool isSuccess = await Task.WhenAny(completion, Task.Delay(80)) == completion;
 
             Assert.True(isSuccess && completion.Status == TaskStatus.RanToCompletion);            
         }
