@@ -65,40 +65,78 @@ the basic components of a state-machine are shown here:
         // ... state and action implementation provided by you.
     }
 
-Activating the state machine is as follows:
+An example of creating, using, and then persisting the state machine is as follows:
 
     var person = new PersonMachine();
     
     //Optionally provide a delegate for logging.
-    person.TraceEvent = Trace;
+    person.TraceEvent = (i,e) => Console.WriteLine(i.Name);
     
-    // This will either initialize or resume operations of the state-machine.
+    // Initialize the state-machine for first-time use.
+    // There is a matching Close() routine that should
+    // only be called if an urgent shut-down of the 
+    // overall process is needed.
     person.Start();
     
-If the state machine requires an initial event input before reacting, then the code would be as
-follows:
-
-    var person = new PersonMachine();
-    person.Start();
+    //Dispatch a couple events, to simulate work...
+    // An example of an object-based event.
+    await person.Dispatch(new TiredMessage());
+    // An example of an enum-based event.
     await person.Dispatch(PersonSignals.Noise);
     
-    //A user-defined persistence routine which saves the state of the state-machine.
-    SaveTheStateSomewhere(person.CurrenState);
+    //Time to persist.  Under normal operations, 
+    //this is NOT grounds for calling person.Close().
     
-The `await` allows the calling code to know when the state machine is no longer processing events, 
-which means it can then be serialized for persistence and resumed later. To restore the state-machine, 
-the code would be:
+    //The type of 'state' depends on how the state
+    //machine was declared.
+    var state = person.CurrentState;
+    SaveTheStateSomewhere(state);
+        
+The `await` statements shown above allow the calling code to know when the 
+state-machine is no longer processing events, which means it is safe to 
+persist the state.  
+
+### Persistence Deep Dive
+
+Because the state-machine is still online (but inactive) during your persistence
+step, it can be directed to take contingency steps to compensate for a 
+persistence failure: 
+
+    var state = person.CurrentState;
+    try
+    {
+        await SaveTheStateSomewhere(state);
+    }
+    catch (Exception ex)
+    {
+        //Both of the examples in this catch block assume
+        //that the "PersonSignals" for the "PersonMachine"
+        //have had suitable additions...
+        
+        //Here "Partition" is meant in the CAP theory sense.
+        //It is just an example event to send...
+        await person.Dispatch(SubscriberSigs.Partition);
+        //Or another possibility:
+        await person.Dispatch(ex);
+    }
+
+In the above example, the state-machine might do something as complex as 
+initiating a saga-oriented transaction rollback, or something as simple as
+writing a message to an emergency log.
+
+To restore the state-machine from the persistent store, the code would be:
 
     //User defined routine to fetch the state.
     var state = GetTheStateFromSomwhere(id);
     person.Start(state);
        
-The variable `state` is either a string, or a user defined type.  To declare a user defined type, then
-the state machine is declared with that type:
+The variable `state` is either a string, or a user defined type.  To declare a 
+user defined type, then the state machine is declared with that type:
 
     public class MyStateMachine : QHsm<MyUserType> {...}
 
-The user defined type must implement the `IQHsmState` interface, which is defined as follows:
+The user defined type must implement the `IQHsmState` interface, which is defined 
+as follows:
 
     public interface IQHsmState
     {
@@ -124,8 +162,58 @@ An example might look like this:
         //...the rest as before...
     } 
     
-When the state-machine is declared with a user defined state type, the `CurrentState` property
-will return that user defined state.
+When the state-machine is declared with a user defined state type, the `CurrentState` 
+property will return that user defined state.
+
+### Shunting (asynchronous actions)
+
+Because the `Dispatch` method of the state-machine is awaitable, the internal
+implementation of a state-machine must cooperate.  This is done through "shunting,"
+as shown in this example:
+
+    //This state is declared within the PersonMachine...
+    protected QState Elated(IQEvent evt)
+    {
+        switch (evt.QSignal)
+        {
+            //Other signal handlers removed for brevity...
+            case (int)PersonSignals.Punch:
+                Shunt = SomeAction(Actions.Sigh);
+                Shunt = AnotherAction();
+                TransitionTo(Sad);
+                return null;
+        }
+        return Happy;
+    }
+    
+    //These actions are also declared within the PersonMachine sample...
+    protected async Task SomeAction(PersonalSignals sig)
+    {
+        await SomeArbitraryCommand(...);
+    }
+    
+    protected async Task AnotherAction()
+    {
+        await MoreWorkOfSomeKind();
+        //When the work is done, naturally we want to punch
+        //the moody person...
+        Dispatch(PersonSignals.Punch);
+    }
+
+Internally, the state-machine `Shunt` property provides reference-counting for 
+the number of outstanding or incomplete asynchronous actions.  When all async actions
+have completed, then the completion `Task` returned by the `Dispatch` method will
+be signalled.  Accordingly, if any async action throws an *unhandled* exception,
+the completion `Task` will also be signalled, and will contain the exception.
+
+If any async action has an unhandled exception, the state-machine will enter
+an internal `faulted` state, and will no longer respond to further input.  This
+is by design; once an *unhandled* exception occurs within the state-machine, there
+is no way to know if the state-machine is stable.
+
+>Note: An asynchronous usage of a state-machine only makes sense with the 
+QHsmWithQueue base type.  It was adapted for multi-threaded and asynchronous
+programming in .Net.
 
 ## Quick Start
 
