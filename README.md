@@ -3,7 +3,10 @@
 This library provides a .Net adaptation of the `QHsm` and `QHsmWithQueue` 
 base classes, which come from [Samek's QP Framework](http://www.state-machine.com/). 
 These are base classes that allow a simple and direct implementation of finite-automata, 
-hierarchical state-charts.  It is compatible with .NET Core (RC1-update2).
+hierarchical state-charts.  The current Visual Studio solution supports .Net Core 3.X, 
+but this code was originally created for .NET Core (RC1-update2). In other words, it
+will work with all versions in-between if needed.
+
 
 This adaption has two primary goals:
 
@@ -12,14 +15,12 @@ This adaption has two primary goals:
 
 ## Contents
 
-The Visual Studio 2015 solution contains a single QHsm project, and a QHsm.Tests project. 
-The test project is simultaneously an xUnit unit-test project and a demo executable.  The 
-[xUnit.net framework](https://xunit.github.io/docs/getting-started-dnx.html) was chosen 
-because it is the semi-official unit-test framework for .NET Core.
+The Visual Studio 2019 solution contains a single QHsm project, and a `TestProgram` project. 
+The test project is a demo console executable.  
 
 ## Usage Examples
 
-The xUnit project contains a state-machine sample of a "moody person".  Using that code for examples, 
+The `TestProgram` project contains a state-machine sample of a "moody person".  Using that code for examples, 
 the basic components of a state-machine are shown here:
 
     /// <summary>
@@ -222,53 +223,18 @@ instrumentation attached that sends messaging output to the console.
 The sample state-machine serves both purposes of testing the QHSM 
 library, and filling an educational role for those who are new to Samek's QHSM.
 
-### Visual Studio 2015
+### Visual Studio 2019
 
-To run the demo from Visual Studio, simply debug-launch (F5) the QHsm.Tests project.
-
-### Command-line
-
-To run either the xUnit unit-tests or the "moody person" demo, 
-open a console window in the QHsm.Tests folder and execute:
-
-    dnu restore
-
-Then, to run the unit-tests:
-
-    dnx test
-
-Or to run the demo:
-
-    dnx run
-    
-### Visual Studio Code (cross-platform IDE)
-
-As of 3/21/2016, [VSCode offers only experimental debugging 
-features for .NET Core](https://blogs.msdn.microsoft.com/visualstudioalm/2016/03/10/experimental-net-core-debugging-in-vs-code/). 
-However, to simply launch the "moody person" sample state-machine 
-from within VSCode, follow these steps:
-
- 1. Use the VSCode explorer to open any C# file found inside the `QHsm.Tests` folder.  
- In the status bar, at the bottom right corner of VSCode, a `Select Project` option appears.
- 1. Use `Select Project` to pick `QHsm.Tests`.
- 1. Open the VSCode "command palette" (press F1), type `dnx` and select the `dnx: run command` option.  
- This will bring up two options: `dnx run` and `dnx test`.
- 1. Select `dnx run`
- 
-See [Visual Studio Code documentation](https://code.visualstudio.com/docs/runtimes/aspnet5) 
-for more information.
-
->Note: As of 3/22/2106, Visual Studio Code has instability even with 
-the directions given above. It is probably safest to run the tests 
-or demo from Visual Studio or the command prompt. 
+To run the demo from Visual Studio, simply debug-launch (F5) the `TestProgram` project.
     
 ## Customization
 
 This QHSM .Net adaptation consists primarily of the following customizations:
 
- * The initial state transition mechanism has been replaced with the `TransitionTo(...)` standard mechanism.
+ * Samek's initial state transition mechanism has been replaced with his primary `TransitionTo(...)` mechanism.
  
- This simplifies readability and the learning process, without sacrificing any functionality.
+ This simplifies readability and the learning process, without sacrificing any functionality.  Said differently, intead of
+ having two mechanisms for performing transitions, there is now only one.
  
  * The QHsmWithQueue `Dispatch` routine has been modified to allow non-blocking, multi-threaded dispatch.
  * The state-machines are now persistable.

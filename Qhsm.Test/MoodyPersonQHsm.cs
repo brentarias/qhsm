@@ -5,7 +5,7 @@ using System.Text;
 using qf4net;
 using System.ComponentModel;
 
-namespace QHsm.Tests
+namespace QHsm.Test
 {
     /// <summary>
     /// In the QHSM, enum values represent events.  In contrast, the .NET paradigm
