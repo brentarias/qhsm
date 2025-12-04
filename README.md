@@ -3,10 +3,9 @@
 This library provides a .Net adaptation of the `QHsm` and `QHsmWithQueue` 
 base classes, which come from [Samek's QP Framework](http://www.state-machine.com/). 
 These are base classes that allow a simple and direct implementation of finite-automata, 
-hierarchical state-charts.  The current Visual Studio solution supports .Net Core 3.X, 
-but this code was originally created for .NET Core (RC1-update2). In other words, it
-will work with all versions in-between if needed.
-
+hierarchical state-charts.  This code was originally created for .NET Core (RC1-update2),
+and has been updated to work with .NET Core 10. Nevertheless a Visual Studio 2019 solution, 
+from the original inception, still remains.
 
 This adaption has two primary goals:
 
@@ -16,7 +15,7 @@ This adaption has two primary goals:
 ## Contents
 
 The Visual Studio 2019 solution contains a single QHsm project, and a `TestProgram` project. 
-The test project is a demo console executable.  
+The test project is a demo console executable.
 
 ## Usage Examples
 
@@ -114,7 +113,7 @@ persistence failure:
         //that the "PersonSignals" for the "PersonMachine"
         //have had suitable additions...
         
-        //Here "Partition" is meant in the CAP theory sense.
+        //Below "Partition" is meant in the CAP theory sense.
         //It is just an example event to send...
         await person.Dispatch(SubscriberSigs.Partition);
         //Or another possibility:

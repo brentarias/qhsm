@@ -2,20 +2,24 @@
 	"version": "0.2.0",
 	"configurations": [
 		{
-			"name": ".NET Core Launch (console)",
-			"type": "coreclr",
+			"name": ".NET Launch (console)",
+			"type": "dotnet",
 			"request": "launch",
 			"preLaunchTask": "build",
-			"program": "${workspaceRoot}/QHsm.Tests/QHsm.Tests",
-			"args": [],
-			"cwd": "${workspaceRoot}",
-			"stopAtEntry": false
+			"projectPath": "${workspaceFolder}/TestProgram/TestProgram.csproj"
 		},
 		{
-			"name": ".NET Core Attach",
-			"type": "coreclr",
+			"name": ".NET Attach",
+			"type": "dotnet",
 			"request": "attach",
 			"processName": "<example>"
+		},
+		{
+			"name": ".NET Test",
+			"type": "dotnet",
+			"request": "launch",
+			"preLaunchTask": "build-test",
+			"projectPath": "${workspaceFolder}/QHsm.Test/QHsm.Test.csproj"
 		}
 	]
 }
